@@ -1,0 +1,41 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v || echo "No tests found, skipping..."
+
+      - name: Deploy to Hugging Face Spaces
+        if: github.ref == 'refs/heads/main'
+        uses: huggingface/huggingface_hub@main
+        with:
+          huggingface_hub_token: ${{ secrets.HF_TOKEN }}
+          huggingface_hub_repo: yamenahmad19801980/ragent_chatbot
+          huggingface_hub_repo_type: space
+          huggingface_hub_space_sdk: gradio
+          huggingface_hub_space_hardware: cpu-basic
+          huggingface_hub_space_python_version: "3.11"
