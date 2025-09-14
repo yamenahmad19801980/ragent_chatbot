@@ -539,11 +539,25 @@ Response:
         """Main chat interface."""
         # Convert Gradio history into LangChain messages
         messages = []
-        for user, bot in history:
-            if user:
-                messages.append(HumanMessage(content=user))
-            if bot:
-                messages.append(AIMessage(content=bot))
+        
+        # Handle both tuple format (old) and dict format (new with type="messages")
+        for item in history:
+            if isinstance(item, dict):
+                # New format: {"role": "user/assistant", "content": "message"}
+                if item.get("role") == "user":
+                    messages.append(HumanMessage(content=item.get("content", "")))
+                elif item.get("role") == "assistant":
+                    messages.append(AIMessage(content=item.get("content", "")))
+            elif isinstance(item, (list, tuple)) and len(item) == 2:
+                # Old format: (user_message, bot_message)
+                user, bot = item
+                if user:
+                    messages.append(HumanMessage(content=user))
+                if bot:
+                    messages.append(AIMessage(content=bot))
+            elif isinstance(item, str):
+                # Single string message
+                messages.append(HumanMessage(content=item))
         
         # Add the new user message
         messages.append(HumanMessage(content=message))
