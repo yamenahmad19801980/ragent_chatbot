@@ -87,7 +87,7 @@ class RagentChatbot:
             }
         )
         
-        return builder.compile(**self.memory.get_memory_config())
+        return builder.compile()
     
     def _detect_intent(self, state: GraphState) -> GraphState:
         """Detect intent from user message."""
@@ -548,8 +548,22 @@ Response:
         # Add the new user message
         messages.append(HumanMessage(content=message))
         
+        # Create config with thread_id for conversation persistence
+        config = {
+            "configurable": {
+                "thread_id": "default_thread",  # Use a default thread ID
+                "base_store": self.memory.get_base_store(),
+                "token": None,  # Will be set after login
+                "user_uuid": Config.USER_UUID,
+                "project_uuid": Config.PROJECT_UUID,
+                "community_uuid": Config.COMMUNITY_UUID,
+                "space_uuid": Config.SPACE_UUID,
+            },
+            "recursion_limit": Config.RECURSION_LIMIT
+        }
+        
         # Run through graph
-        result = self.graph.invoke({"messages": messages})
+        result = self.graph.invoke({"messages": messages}, config=config)
         
         # Get the assistant's reply
         reply = result["messages"][-1].content
