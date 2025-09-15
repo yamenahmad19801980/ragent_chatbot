@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.graph.message import add_messages
 from langgraph.types import Command, interrupt
 from typing_extensions import Annotated, TypedDict
+import pandas as pd
 
 from config import Config
 from domain.api_client import SyncrowAPIClient
@@ -19,9 +20,6 @@ from llm import get_qwen_llm
 from llm.langsmith_config import setup_langsmith, create_run_name
 from memory import ChatMemory
 from tool_registry import ToolRegistry
-from services.device_service import DeviceService
-from prompts.templates import PromptTemplates
-from utils.normalizer import MessageNormalizer
 
 class GraphState(TypedDict):
     """State model for the agent graph."""
@@ -35,8 +33,7 @@ class RagentChatbot:
         self.memory = ChatMemory()
         self.tool_registry = ToolRegistry()
         self.api_client = self.tool_registry.get_api_client()
-        self.device_service = DeviceService(self.api_client)
-        self.normalizer = MessageNormalizer()
+        self.device_descriptions = pd.read_csv(Config.CSV_PATH)
         
         # Setup LangSmith for tracking and debugging
         self.langsmith_enabled = setup_langsmith()
@@ -101,28 +98,73 @@ class RagentChatbot:
         """Detect intent from user message."""
         raw_messages = state["messages"]
         
-        # Get devices using centralized service
-        collected_devices = self.device_service.get_devices_in_space(
+        # Get devices
+        devices_json = self.api_client.get_devices_per_space(
             Config.PROJECT_UUID, Config.COMMUNITY_UUID, Config.SPACE_UUID
         )
         
-        if not collected_devices:
+        if devices_json.get("statusCode") == 200:
+            collected_devices = []
+            for device_json in devices_json["data"]:
+                collected_devices.append(Device(
+                    uuid=device_json["uuid"],
+                    product_type=device_json["productType"],
+                    name=device_json["name"],
+                    category_name=device_json["categoryName"],
+                    spaces=device_json["spaces"],
+                    subspace={
+                        "uuid": device_json["subspace"]["uuid"],
+                        "subspaceName": device_json["subspace"]["subspaceName"]
+                    } if device_json["subspace"] else None,
+                    tag=device_json["deviceTag"]["name"] if device_json["deviceTag"] else None
+                ))
+        else:
+            print(f"[WARN] Failed at fetching devices: {devices_json}")
             return {"messages": [AIMessage("Failed at Fetching Devices")] + state["messages"]}
         
         # Store devices
         namespace = ("devices", Config.USER_UUID)
         self.memory.get_base_store().put(namespace, Config.USER_UUID, collected_devices)
         
-        # Normalize messages using centralized normalizer
-        messages = self.normalizer.normalize_messages(raw_messages)
+        # Normalize messages
+        messages: List[BaseMessage] = []
+        for m in raw_messages:
+            if isinstance(m, BaseMessage):
+                messages.append(m)
+            elif isinstance(m, dict):
+                if "role" in m and "content" in m:
+                    role_to_type = {"user": "human", "assistant": "ai", "system": "system"}
+                    message_type = role_to_type.get(m["role"], "human")
+                    messages.extend(messages_from_dict([{
+                        "type": message_type,
+                        "data": {"content": m["content"]}
+                    }]))
+                elif "type" in m and "data" in m:
+                    messages.extend(messages_from_dict([m]))
+                else:
+                    print(f"[WARN] Skipping unrecognized message format: {m}")
+            else:
+                print(f"[WARN] Invalid message object: {m}")
         
         # Find user message
         user_msg = next((msg.content for msg in reversed(messages) if msg.type == "human" and msg.content), None)
         if not user_msg:
             raise ValueError("No user message found")
         
-        # Create full prompt using centralized template
-        prompt = PromptTemplates.format_intent_detection(user_msg, collected_devices)
+        # Load intent prompt
+        with open("prompts/intent_prompt.txt", "r") as f:
+            intent_prompt = f.read()
+        
+        # Create full prompt
+        prompt = f"""
+{intent_prompt}
+
+### USER INPUT:
+"{user_msg}"
+
+### AVAILABLE DEVICES:
+{json.dumps([device.__dict__ for device in collected_devices], indent=2)}
+"""
         
         llm_with_intent = self.llm.bind_tools([Intent], parallel_tool_calls=True)
         response = llm_with_intent.invoke([
@@ -177,8 +219,8 @@ class RagentChatbot:
         
         query_responses = []
         for user_message in user_messages:
-            result = self.device_service.query_device_status(user_message["device_uuid"])
-            query_responses.append(result)
+            status = self.api_client.get_status(user_message["device_uuid"])
+            query_responses.append(status)
         
         return {**state, "messages": state["messages"] + [AIMessage(content=str(query_responses))]}
     
@@ -187,6 +229,8 @@ class RagentChatbot:
         message = state["messages"][-1]
         devices = self.memory.get_base_store().search(("devices", Config.USER_UUID))
         
+        user_messages = []
+        descriptions = []
         control_responses = []
         
         for tool_call in message.tool_calls:
@@ -196,17 +240,59 @@ class RagentChatbot:
             if tool_call["args"]["Intent"] == "control":
                 product_type = [device.product_type for device in devices[0].value if device.uuid == device_uuid]
                 if product_type:
-                    # Use centralized device service
-                    result = self.device_service.control_device(device_uuid, user_message, product_type[0])
+                    user_messages.append({
+                        "device_uuid": device_uuid,
+                        "product_type": product_type[0],
+                        "user_message": user_message
+                    })
                     
-                    if "error" in result:
-                        control_responses.append(f"Failed: {result['error']}")
-                    else:
-                        for device_result in result["results"]:
-                            if device_result["success"]:
-                                control_responses.append(f"Success for {device_uuid}: {device_result['response']}")
-                            else:
-                                control_responses.append(f"Failed: {device_result['error']}")
+                    rows = self.device_descriptions[self.device_descriptions["product_type"] == product_type[0]]
+                    for row in rows.values:
+                        code, code_description, value, value_description, product_type = row
+                        descriptions.append(f"""
+                            "Product Type": {product_type},
+                            "Code": {code},
+                            "Code Description": {code_description},
+                            "Value": {value},
+                            "Value Description": {value_description}
+                        """)
+        
+        llm_tool_functions = self.llm.bind_tools(tools=[DeviceFunction], parallel_tool_calls=True)
+        
+        system_prompt = f"""You are an IoT assistant. 
+Your job is to take the human command and turn it into a structured object that should align with the possible value of the API.
+If the user`s prompt does not align with the possible values then you should set them to None and the status to Failure.
+Don't do the mistake of setting the value as a dictionary when the datatype is not dictionary, for example don't do this:
+['value': 'True'] when the datatype is boolean, it should be only this ---> True
+
+<user_messages>
+{user_messages}
+</user_messages>
+
+This is an explanation for how to control product types:
+<descriptions>
+{descriptions}
+</descriptions>
+
+The following is the original prompt before being decomposed into user_messages:
+<original_prompt>
+{state["messages"][-1]}
+</original_prompt>
+"""
+        
+        response = llm_tool_functions.invoke([SystemMessage(content=system_prompt)])
+        
+        for tool_call in response.tool_calls:
+            if tool_call["args"]["status"] == "Success":
+                code = tool_call["args"]["code"]
+                value = tool_call["args"]["value"]
+                device_uuid = tool_call["args"]["device_uuid"]
+                
+                control_response = self.api_client.batch_control("COMMAND", [device_uuid], code, value)
+                control_responses.append(f"Success for {device_uuid}: {control_response}")
+            else:
+                failure_reason = tool_call["args"].get("failure_reason", "Unknown failure")
+                control_responses.append(f"Failed: {failure_reason}")
         
         if not control_responses:
             control_responses = ["No control actions were performed."]
@@ -228,17 +314,32 @@ class RagentChatbot:
                 user_message = tool_call["args"]["user_message"]
                 break
         
-        # Get scenes using centralized service
-        collected_scenes = self.device_service.get_scenes(
-            Config.PROJECT_UUID, Config.COMMUNITY_UUID, Config.SPACE_UUID
-        )
+        scenes = self.api_client.get_scenes(Config.PROJECT_UUID, Config.COMMUNITY_UUID, Config.SPACE_UUID)
+        collected_scenes = []
+        for scene in scenes.get("data", []):
+            collected_scenes.append({
+                "scene_name": scene["name"],
+                "scene_uuid": scene["uuid"]
+            })
         
-        # Use centralized service for scene triggering
-        result = self.device_service.trigger_scene_by_name(user_message, collected_scenes)
+        system_prompt = f"""
+        You are an IoT assistant that determines that tries to search for scenes based on user prompt.
+        If the scene is not available then just set the field uuid to None.
         
-        if result["success"]:
+        User message: {user_message}
+        Available scenes: {collected_scenes}
+        """
+        
+        llm_with_scene = self.llm.bind_tools(tools=[Scene])
+        llm_response = llm_with_scene.invoke([SystemMessage(content=system_prompt)])
+        
+        if llm_response.tool_calls and llm_response.tool_calls[0]["args"]["scene_uuid"]:
+            scene_uuid = llm_response.tool_calls[0]["args"]["scene_uuid"]
+            scene_name = llm_response.tool_calls[0]["args"]["scene_name"]
+            
+            response = self.api_client.trigger_scene(scene_uuid)
             return {
-                "messages": state["messages"] + [AIMessage(content=f"{result['scene_name']} Scene: " + str(result["response"]))]
+                "messages": state["messages"] + [AIMessage(content=f"{scene_name} Scene: " + str(response))]
             }
         else:
             return {
@@ -256,23 +357,57 @@ class RagentChatbot:
             if tool_call["args"]["Intent"] == "schedule":
                 user_messages.append({"device_uuid": device_uuid, "user_message": user_message})
         
-        AI_messages = []
+        code_descriptions = {"control": "Commands: open, stop, close - controls the direction of the curtains"}
+        descriptions = []
+        llm_tool_functions = self.llm.bind_tools(tools=[DeviceSchedule], parallel_tool_calls=True)
         
         for user_message in user_messages:
-            # Use centralized device service for scheduling
-            result = self.device_service.schedule_device(
-                user_message["device_uuid"], 
-                user_message["user_message"]
-            )
-            
-            if "error" in result:
-                AI_messages.append(f"Failed: {result['error']}")
+            functions_json = self.api_client.get_device_functions(user_message["device_uuid"])
+            if functions_json.get("statusCode") == 201:
+                possible_values = functions_json["data"]["functions"]
+                user_message["possible_values"] = possible_values
+                for possible_value in possible_values:
+                    if possible_value["code"] in code_descriptions.keys():
+                        descriptions.append({possible_value["code"]: code_descriptions[possible_value["code"]]})
             else:
-                for device_result in result["results"]:
-                    if device_result["success"]:
-                        AI_messages.append(device_result["response"])
-                    else:
-                        AI_messages.append(f"Failed: {device_result['error']}")
+                print("[WARN] Failed at fetching functions")
+                user_message["possible_values"] = None
+        
+        system_prompt = f"""You are an IoT assistant. 
+Your job is to take the human command and turn it into a structured object that should align with the possible value of the API.
+If the user`s prompt does not align with the possible values then you should set them to None and the status to Failure.
+Don't do the mistake of setting the value as a dictionary when the datatype is not dictionary, for example don't do this:
+['value': 'True'] when the datatype is boolean, it should be only this ---> True
+
+The dictionary of devices with corresponding possible values are mentioned below:
+<user_messages>
+{user_messages}
+</user_messages>
+
+Each possible value correspond to a certain device ID. The device IDs are in the same order of the user`s prompt. 
+
+The following is a description for the codes:
+<descriptions>
+{descriptions}
+</descriptions>
+"""
+        
+        response = llm_tool_functions.invoke([SystemMessage(content=system_prompt)])
+        AI_messages = []
+        
+        for tool_call in response.tool_calls:
+            if tool_call["args"]["status"] == "Success":
+                code = tool_call["args"]["code"]
+                value = tool_call["args"]["value"]
+                device_uuid = tool_call["args"]["device_uuid"]
+                time = tool_call["args"]["time"]
+                days = tool_call["args"]["days"]
+                
+                control_response = self.api_client.add_schedule(device_uuid, "category_name", time, code, value, days)
+                print(control_response)
+                AI_messages.append(control_response)
+            else:
+                print(tool_call["args"]["failure_reason"])
         
         return {**state, "messages": state["messages"] + [AIMessage(content=str(AI_messages))]}
     
@@ -280,8 +415,17 @@ class RagentChatbot:
         """Handle general chat with tool-calling agent support."""
         messages = state["messages"]
         
-        # Use centralized normalizer for message processing
-        lc_messages = self.normalizer.normalize_messages(messages)
+        # Ensure all messages are LangChain messages
+        lc_messages: List[BaseMessage] = []
+        for m in messages:
+            if isinstance(m, BaseMessage):
+                lc_messages.append(m)
+            elif isinstance(m, dict) and "role" in m:
+                role_map = {"user": "human", "assistant": "ai", "system": "system", "tool": "tool", "tool_call": "tool_call"}
+                lc_messages.extend(messages_from_dict([{
+                    "type": role_map[m["role"]],
+                    "data": {"content": m["content"]}
+                }]))
         
         # Filter out incomplete tool call sequences from chat history
         filtered_messages = []
@@ -338,8 +482,11 @@ class RagentChatbot:
                 response_message += "Failed to handle the following instruction: " + str(user_message) + "\n"
                 response_message += "Reason: " + str(reason)
         
-        # Use centralized template
-        clarification_prompt = PromptTemplates.format_clarification_request(response_message)
+        clarification_prompt = (
+            f"I'm having trouble understanding your request.\n"
+            f"{response_message}\n"
+            f"Could you please clarify what you meant?"
+        )
         
         return {
             **state,
@@ -349,7 +496,7 @@ class RagentChatbot:
     def _request_confirmation(self, state: GraphState) -> GraphState:
         """Request confirmation for high-risk actions."""
         state["messages"] = state["messages"] + [
-            AIMessage(content=PromptTemplates.HIGH_RISK_CONFIRMATION)
+            AIMessage(content="⚠️ This is a high-risk action. Please reply 'confirm' or 'cancel'.")
         ]
         
         confirmation_response = interrupt({
@@ -376,9 +523,14 @@ class RagentChatbot:
         if not isinstance(last, AIMessage):
             return state
         
-        # Use centralized template
-        enhance_prompt = PromptTemplates.format_response_enhancement(last.content)
-        
+        enhance_prompt = f"""
+You are a friendly smart-home assistant.
+Rewrite the following response in a concise, user-friendly way.
+Do NOT invent actions or change their outcome. Keep all technical facts intact.
+
+Response:
+{last.content}
+"""
         try:
             enhanced = self.llm.invoke([
                 SystemMessage(content="You are a response enhancer that improves tone only."),
@@ -390,8 +542,27 @@ class RagentChatbot:
     
     def chat(self, message: str, history: list) -> str:
         """Main chat interface."""
-        # Convert Gradio history into LangChain messages using centralized normalizer
-        messages = self.normalizer.normalize_messages(history)
+        # Convert Gradio history into LangChain messages
+        messages = []
+        
+        # Handle both tuple format (old) and dict format (new with type="messages")
+        for item in history:
+            if isinstance(item, dict):
+                # New format: {"role": "user/assistant", "content": "message"}
+                if item.get("role") == "user":
+                    messages.append(HumanMessage(content=item.get("content", "")))
+                elif item.get("role") == "assistant":
+                    messages.append(AIMessage(content=item.get("content", "")))
+            elif isinstance(item, (list, tuple)) and len(item) == 2:
+                # Old format: (user_message, bot_message)
+                user, bot = item
+                if user:
+                    messages.append(HumanMessage(content=user))
+                if bot:
+                    messages.append(AIMessage(content=bot))
+            elif isinstance(item, str):
+                # Single string message
+                messages.append(HumanMessage(content=item))
         
         # Add the new user message
         messages.append(HumanMessage(content=message))
