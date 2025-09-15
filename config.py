@@ -19,6 +19,9 @@ class Config:
     
     # API Keys
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+    LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+    LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "ragent-chatbot")
+    LANGSMITH_ENDPOINT = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
     
     # Syncrow API Configuration
     BASE_URL = "https://syncrow-stg.azurewebsites.net"
@@ -59,10 +62,18 @@ class Config:
             cls.PASSWORD,
         ]
         
+        optional_vars = [
+            cls.LANGSMITH_API_KEY,
+        ]
+        
         missing_vars = [var for var in required_vars if not var]
         if missing_vars:
             print(f"Missing required environment variables: {missing_vars}")
             return False
+        
+        missing_optional = [var for var in optional_vars if not var]
+        if missing_optional:
+            print(f"Missing optional environment variables (LangSmith will be disabled): {missing_optional}")
         
         return True
     

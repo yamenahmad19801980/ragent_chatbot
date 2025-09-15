@@ -17,6 +17,7 @@ from config import Config
 from domain.api_client import SyncrowAPIClient
 from domain.objects import Device, Intent, DeviceFunction, DeviceSchedule, Scene
 from llm import get_qwen_llm
+from llm.langsmith_config import setup_langsmith, create_run_name
 from memory import ChatMemory
 from tool_registry import ToolRegistry
 
@@ -33,6 +34,10 @@ class RagentChatbot:
         self.tool_registry = ToolRegistry()
         self.api_client = self.tool_registry.get_api_client()
         self.device_descriptions = pd.read_csv(Config.CSV_PATH)
+        
+        # Setup LangSmith for tracking and debugging
+        self.langsmith_enabled = setup_langsmith()
+        
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
@@ -575,6 +580,15 @@ Response:
             },
             "recursion_limit": Config.RECURSION_LIMIT
         }
+        
+        # Add LangSmith metadata if enabled
+        if self.langsmith_enabled:
+            config["metadata"] = {
+                "run_name": create_run_name(message),
+                "user_id": Config.USER_UUID,
+                "project": Config.LANGSMITH_PROJECT,
+                "conversation_type": "smart_home_assistant"
+            }
         
         # Run through graph
         result = self.graph.invoke({"messages": messages}, config=config)
