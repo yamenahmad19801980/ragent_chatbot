@@ -9,7 +9,9 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from config import Config
 from domain.api_client import SyncrowAPIClient
-from tools import create_device_tools, create_web_search_tool
+from tools import create_web_search_tool
+from services.device_service import create_device_tools
+from prompts.templates import PromptTemplates
 from llm import get_qwen_llm
 
 class ToolRegistry:
@@ -52,8 +54,8 @@ class ToolRegistry:
     
     def get_agent_prompt(self) -> ChatPromptTemplate:
         """Get the agent prompt template."""
-        with open("prompts/agent_prompt.txt", "r") as f:
-            system_prompt = f.read()
+        # Use centralized template
+        system_prompt = PromptTemplates.AGENT_SYSTEM
         
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
