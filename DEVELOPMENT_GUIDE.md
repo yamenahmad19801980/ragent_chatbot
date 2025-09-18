@@ -377,3 +377,122 @@ For questions or issues, please:
 2. Search existing GitHub issues
 3. Create a new issue with detailed information
 4. Ask in team chat for quick help
+
+
+
+
+Great question! Let me explain how the Markdown (`.md`) files are used in this project. I can see from the prompts directory that there are several `.md` files that serve as prompt templates. Let me show you how they work:
+
+
+[1 tool called]
+
+Now let me show you some examples of the MD files and how they're used:
+
+
+[3 tools called]
+
+Now let me show you how these MD files are used in the code:
+
+
+[1 tool called]
+
+Now let me show you how these MD files are actually used in the agent code:
+
+
+[1 tool called]
+
+Let me find the specific usage of the MD prompts:
+
+
+[1 tool called]
+
+Perfect! Now let me show you how the MD files are used in practice:
+
+
+[1 tool called]
+
+## 📝 **How MD Files Are Used in This Project**
+
+The Markdown (`.md`) files serve as **prompt templates** for the Large Language Model (LLM). Here's how they work:
+
+### **🎯 Purpose of MD Files:**
+
+#### **1. Centralized Prompt Management**
+- **Before**: Prompts were hardcoded in Python files (messy, hard to maintain)
+- **After**: Prompts are stored in separate `.md` files (clean, organized, readable)
+
+#### **2. Template System with Variables**
+Each MD file contains placeholders like `{user_message}`, `{available_devices}` that get filled with real data at runtime.
+
+### **📁 MD Files and Their Uses:**
+
+| **File** | **Purpose** | **Variables** | **Used When** |
+|----------|-------------|---------------|---------------|
+| `intent_detection.md` | Classify user intent | `user_message`, `available_devices` | User sends a message |
+| `device_control.md` | Control IoT devices | `user_messages`, `descriptions`, `original_prompt` | Controlling devices |
+| `device_schedule.md` | Schedule device actions | `user_messages`, `descriptions` | Scheduling devices |
+| `scene_activation.md` | Activate smart scenes | `user_message`, `available_scenes` | Activating scenes |
+| `response_enhancement.md` | Improve response tone | `response` | Before sending response |
+| `clarification_request.md` | Ask for clarification | `failed_instruction`, `reason` | When command is unclear |
+| `confirmation_request.md` | Confirm risky actions | `action_summary`, `risk_level` | Before dangerous operations |
+| `agent_system.md` | Main system personality | None | General conversation |
+
+### **🔧 How It Works:**
+
+#### **1. Template Loading:**
+```python
+# In prompt_manager.py
+template = PromptTemplate.from_file(
+    "intent_detection.md",
+    input_variables=["user_message", "available_devices"]
+)
+```
+
+#### **2. Variable Substitution:**
+```python
+# In agent.py
+prompt = prompt_manager.get_intent_detection_prompt(
+    user_msg,           # Fills {user_message}
+    str(devices_json)   # Fills {available_devices}
+)
+```
+
+#### **3. Example Transformation:**
+
+**MD Template (`intent_detection.md`):**
+```markdown
+## USER INPUT:
+"{user_message}"
+
+## AVAILABLE DEVICES:
+{available_devices}
+```
+
+**Becomes:**
+```markdown
+## USER INPUT:
+"Turn on the living room lights"
+
+## AVAILABLE DEVICES:
+[{"uuid": "light-123", "name": "Living Room Light", "type": "3G"}]
+```
+
+### **✅ Benefits of This Approach:**
+
+1. **�� Readable**: Markdown is human-readable, easy to understand
+2. **�� Maintainable**: Update prompts without touching Python code
+3. **�� Reusable**: Same template used multiple times with different data
+4. **🎯 Consistent**: All prompts follow the same format
+5. **👥 Collaborative**: Non-developers can edit prompts easily
+6. **🐛 Debuggable**: Easy to see what prompt was sent to LLM
+
+### **�� Real Usage Example:**
+
+When you say "Turn on the lights":
+
+1. **`intent_detection.md`** → Classifies this as "control" intent
+2. **`device_control.md`** → Converts to device control commands
+3. **`response_enhancement.md`** → Improves the response tone
+4. **`agent_system.md`** → Maintains friendly personality
+
+This system makes the chatbot's "brain" (prompts) organized, maintainable, and easy to understand! 🧠✨
