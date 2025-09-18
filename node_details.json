@@ -1,0 +1,180 @@
+{
+  "nodes": {
+    "detect_intent": {
+      "type": "processing",
+      "description": "Analyzes user input and classifies intent",
+      "inputs": [
+        "user_message",
+        "device_list"
+      ],
+      "outputs": [
+        "intent_classification",
+        "device_uuid",
+        "reason"
+      ],
+      "tools_used": [
+        "Intent model"
+      ],
+      "api_calls": [
+        "get_devices_per_space"
+      ]
+    },
+    "handle_control": {
+      "type": "action",
+      "description": "Controls IoT devices via Syncrow API",
+      "inputs": [
+        "device_uuid",
+        "user_message",
+        "product_type"
+      ],
+      "outputs": [
+        "control_result",
+        "success_status"
+      ],
+      "tools_used": [
+        "DeviceFunction model",
+        "batch_control API"
+      ],
+      "api_calls": [
+        "batch_control",
+        "get_device_functions"
+      ]
+    },
+    "handle_query": {
+      "type": "action",
+      "description": "Queries device status and information",
+      "inputs": [
+        "device_uuid"
+      ],
+      "outputs": [
+        "device_status",
+        "device_info"
+      ],
+      "tools_used": [],
+      "api_calls": [
+        "get_status"
+      ]
+    },
+    "handle_schedule": {
+      "type": "action",
+      "description": "Schedules device actions for specific times",
+      "inputs": [
+        "device_uuid",
+        "user_message",
+        "time",
+        "days"
+      ],
+      "outputs": [
+        "schedule_result",
+        "schedule_id"
+      ],
+      "tools_used": [
+        "DeviceSchedule model"
+      ],
+      "api_calls": [
+        "add_schedule",
+        "get_device_functions"
+      ]
+    },
+    "handle_scene": {
+      "type": "action",
+      "description": "Activates smart home scenes",
+      "inputs": [
+        "user_message",
+        "available_scenes"
+      ],
+      "outputs": [
+        "scene_result",
+        "scene_name"
+      ],
+      "tools_used": [
+        "Scene model"
+      ],
+      "api_calls": [
+        "get_scenes",
+        "trigger_scene"
+      ]
+    },
+    "chat_node": {
+      "type": "conversation",
+      "description": "Handles general conversation and web search",
+      "inputs": [
+        "user_message",
+        "chat_history"
+      ],
+      "outputs": [
+        "response",
+        "search_results"
+      ],
+      "tools_used": [
+        "web_search",
+        "general_llm"
+      ],
+      "api_calls": [
+        "Tavily search API"
+      ]
+    },
+    "request_clarification": {
+      "type": "interaction",
+      "description": "Requests clarification for ambiguous requests",
+      "inputs": [
+        "ambiguous_intent",
+        "reason"
+      ],
+      "outputs": [
+        "clarification_message"
+      ],
+      "tools_used": [],
+      "api_calls": []
+    },
+    "request_confirmation": {
+      "type": "interaction",
+      "description": "Requests confirmation for high-risk actions",
+      "inputs": [
+        "high_risk_action"
+      ],
+      "outputs": [
+        "confirmation_request"
+      ],
+      "tools_used": [],
+      "api_calls": []
+    },
+    "enhance_response": {
+      "type": "processing",
+      "description": "Enhances response tone and user-friendliness",
+      "inputs": [
+        "raw_response"
+      ],
+      "outputs": [
+        "enhanced_response"
+      ],
+      "tools_used": [
+        "response_enhancement_llm"
+      ],
+      "api_calls": []
+    }
+  },
+  "edges": {
+    "conditional": [
+      "route_message \u2192 handle_control",
+      "route_message \u2192 handle_query",
+      "route_message \u2192 handle_schedule",
+      "route_message \u2192 handle_scene",
+      "route_message \u2192 chat_node",
+      "route_message \u2192 request_clarification",
+      "route_message \u2192 request_confirmation",
+      "confirmation_result \u2192 handle_control",
+      "confirmation_result \u2192 END"
+    ],
+    "direct": [
+      "START \u2192 detect_intent",
+      "handle_control \u2192 enhance_response",
+      "handle_query \u2192 enhance_response",
+      "handle_schedule \u2192 enhance_response",
+      "handle_scene \u2192 enhance_response",
+      "chat_node \u2192 enhance_response",
+      "request_clarification \u2192 enhance_response",
+      "enhance_response \u2192 END"
+    ]
+  }
+}

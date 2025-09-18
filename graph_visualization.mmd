@@ -1,0 +1,38 @@
+graph TD
+    START([START]) --> detect_intent[detect_intent]
+    
+    detect_intent --> route_decision{route_message}
+    
+    route_decision -->|ambiguous| request_clarification[request_clarification]
+    route_decision -->|control| handle_control[handle_control]
+    route_decision -->|query| handle_query[handle_query]
+    route_decision -->|schedule| handle_schedule[handle_schedule]
+    route_decision -->|scene| handle_scene[handle_scene]
+    route_decision -->|conversation| chat_node[chat_node]
+    route_decision -->|high_risk| request_confirmation[request_confirmation]
+    route_decision -->|END| END_NODE([END])
+    
+    request_clarification --> enhance_response[enhance_response]
+    handle_control --> enhance_response
+    handle_query --> enhance_response
+    handle_schedule --> enhance_response
+    handle_scene --> enhance_response
+    chat_node --> enhance_response
+    
+    request_confirmation --> confirmation_decision{confirmation_result}
+    confirmation_decision -->|confirmed| handle_control
+    confirmation_decision -->|cancelled| END_NODE
+    confirmation_decision -->|unclear| request_confirmation
+    
+    enhance_response --> END_NODE
+    
+    %% Styling
+    classDef startEnd fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef decision fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef enhance fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    
+    class START,END_NODE startEnd
+    class detect_intent,handle_control,handle_query,handle_schedule,handle_scene,chat_node,request_clarification,request_confirmation process
+    class route_decision,confirmation_decision decision
+    class enhance_response enhance

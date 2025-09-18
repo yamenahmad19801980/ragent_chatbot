@@ -1,0 +1,57 @@
+# Production Environment Configuration
+environment: production
+
+database:
+  host: ${DB_HOST}
+  port: ${DB_PORT}
+  name: ${DB_NAME}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  ssl_mode: require
+  pool_size: 20
+  max_overflow: 30
+
+api:
+  timeout: 30
+  retry_attempts: 3
+  retry_delay: 1.0
+  rate_limit: 1000
+  rate_limit_window: 60
+
+cache:
+  enabled: true
+  ttl: 600
+  backend: redis
+  redis_host: ${REDIS_HOST}
+  redis_port: ${REDIS_PORT}
+  redis_db: ${REDIS_DB}
+  redis_password: ${REDIS_PASSWORD}
+
+logging:
+  level: WARNING
+  file: /var/log/ragent_chatbot/ragent_chatbot.log
+  structured: true
+  colored: false
+  max_file_size: 52428800  # 50MB
+  backup_count: 10
+
+llm:
+  model_name: qwen-plus-2025-04-28
+  max_tokens: 3000
+  timeout: 30
+  max_retries: 3
+  temperature: 0.7
+
+security:
+  secret_key: ${SECRET_KEY}
+  jwt_expiry: 1800  # 30 minutes
+  password_min_length: 12
+  max_login_attempts: 3
+  lockout_duration: 1800  # 30 minutes
+
+performance:
+  enable_async: true
+  max_workers: 8
+  connection_pool_size: 50
+  request_timeout: 30
+  enable_compression: true

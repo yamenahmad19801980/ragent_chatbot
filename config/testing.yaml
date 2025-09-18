@@ -1,0 +1,53 @@
+# Testing Environment Configuration
+environment: testing
+
+database:
+  host: localhost
+  port: 5432
+  name: ragent_chatbot_test
+  user: postgres
+  password: password
+  ssl_mode: prefer
+  pool_size: 2
+  max_overflow: 5
+
+api:
+  timeout: 10
+  retry_attempts: 1
+  retry_delay: 0.5
+  rate_limit: 1000
+  rate_limit_window: 60
+
+cache:
+  enabled: false
+  ttl: 60
+  backend: memory
+
+logging:
+  level: ERROR
+  file: logs/ragent_chatbot_test.log
+  structured: true
+  colored: false
+  max_file_size: 1048576  # 1MB
+  backup_count: 2
+
+llm:
+  model_name: qwen-plus-2025-04-28
+  max_tokens: 1000
+  timeout: 10
+  max_retries: 1
+  temperature: 0.1
+
+security:
+  secret_key: test-secret-key
+  jwt_expiry: 300  # 5 minutes
+  password_min_length: 6
+  max_login_attempts: 10
+  lockout_duration: 60  # 1 minute
+
+performance:
+  enable_async: false
+  max_workers: 1
+  connection_pool_size: 5
+  request_timeout: 10
+  enable_compression: false

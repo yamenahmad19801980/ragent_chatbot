@@ -1,0 +1,93 @@
+
+RAGENT CHATBOT LANGGRAPH STRUCTURE
+==================================
+
+START
+  ↓
+detect_intent
+  ↓
+route_message (Decision Node)
+  ├── ambiguous → request_clarification
+  ├── control → handle_control
+  ├── query → handle_query
+  ├── schedule → handle_schedule
+  ├── scene → handle_scene
+  ├── conversation → chat_node
+  ├── high_risk → request_confirmation
+  └── END → END
+
+CONFIRMATION FLOW:
+request_confirmation → confirmation_result
+  ├── confirmed → handle_control
+  ├── cancelled → END
+  └── unclear → request_confirmation
+
+ENHANCEMENT FLOW:
+All user-facing nodes → enhance_response → END
+
+NODE DESCRIPTIONS:
+==================
+
+1. detect_intent
+   - Analyzes user input
+   - Classifies intent (control, query, schedule, etc.)
+   - Identifies target devices
+   - Returns intent classification
+
+2. handle_control
+   - Controls IoT devices
+   - Sends commands to Syncrow API
+   - Handles device responses
+   - Returns control results
+
+3. handle_query
+   - Queries device status
+   - Gets device information
+   - Returns status data
+
+4. handle_schedule
+   - Schedules device actions
+   - Sets up recurring tasks
+   - Manages time-based controls
+
+5. handle_scene
+   - Activates smart home scenes
+   - Triggers predefined configurations
+   - Manages scene states
+
+6. chat_node
+   - Handles general conversation
+   - Uses web search tools
+   - Provides general assistance
+
+7. request_clarification
+   - Asks for clarification
+   - Handles ambiguous requests
+   - Provides helpful prompts
+
+8. request_confirmation
+   - Requests confirmation for high-risk actions
+   - Implements safety measures
+   - Handles user approval
+
+9. enhance_response
+   - Improves response tone
+   - Makes responses more user-friendly
+   - Final response processing
+
+CONDITIONAL ROUTING:
+===================
+
+The graph uses conditional edges based on:
+- Intent classification results
+- User confirmation responses
+- Error conditions
+- Safety requirements
+
+MEMORY AND STATE:
+================
+
+- Messages: Conversation history
+- Device data: IoT device information
+- User context: User preferences and settings
+- API state: Syncrow API connection status
