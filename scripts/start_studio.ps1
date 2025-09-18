@@ -8,7 +8,8 @@ Write-Host "================================================" -ForegroundColor C
 try {
     $pythonVersion = python --version 2>&1
     Write-Host "✅ Python version: $pythonVersion" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "❌ Python is not installed or not in PATH" -ForegroundColor Red
     Write-Host "Please install Python 3.8+ and add it to your PATH" -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
@@ -36,7 +37,8 @@ Write-Host "📦 Checking dependencies..." -ForegroundColor Yellow
 try {
     python -c "import langgraph_studio" 2>$null
     Write-Host "✅ Dependencies are installed" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "🔧 Installing dependencies..." -ForegroundColor Yellow
     pip install -r requirements.txt
     if ($LASTEXITCODE -ne 0) {
@@ -51,7 +53,8 @@ Write-Host "🧪 Testing graph compilation..." -ForegroundColor Yellow
 try {
     python -c "from agent import get_compiled_graph; print('Graph compiled successfully')" 2>$null
     Write-Host "✅ Graph compiled successfully" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "❌ Graph compilation failed" -ForegroundColor Red
     Write-Host "Please check your code and dependencies" -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
@@ -70,7 +73,8 @@ Write-Host ""
 
 try {
     langgraph-studio --config studio/langgraph.json --port 8123
-} catch {
+}
+catch {
     Write-Host "❌ Failed to start LangGraph Studio" -ForegroundColor Red
     Write-Host "Please check the error messages above" -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
