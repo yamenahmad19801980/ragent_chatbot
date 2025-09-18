@@ -5,13 +5,45 @@ Gradio interface for the smart home chatbot.
 
 import gradio as gr
 from agent import RagentChatbot
+from utils.logger import get_logger
 
 # Initialize chatbot instance
 chatbot = RagentChatbot()
+logger = get_logger(__name__)
 
 def chat_fn(message, history):
     """Chat function for Gradio interface."""
     return chatbot.chat(message, history)
+
+def re_login():
+    """Re-login to refresh access token."""
+    try:
+        logger.info("Attempting to refresh access token...")
+        success = chatbot.refresh_token()
+        if success:
+            logger.info("Access token refreshed successfully")
+            return chatbot.get_token_status()
+        else:
+            logger.error("Failed to refresh access token")
+            return "❌ Login failed. Please check your credentials."
+    except Exception as e:
+        logger.error(f"Re-login error: {e}")
+        return f"❌ Login error: {str(e)}"
+
+def check_token():
+    """Check if the current token is valid."""
+    try:
+        logger.info("Checking token validity...")
+        is_valid = chatbot.check_token_validity()
+        if is_valid:
+            logger.info("Token is valid")
+            return chatbot.get_token_status()
+        else:
+            logger.warning("Token is invalid")
+            return "❌ Token is invalid. Please re-login."
+    except Exception as e:
+        logger.error(f"Error checking token: {e}")
+        return f"❌ Error checking token: {str(e)}"
 
 def main():
     """Main application function."""
@@ -35,6 +67,17 @@ def main():
             )
             send_btn = gr.Button("Send", variant="primary", scale=1)
             clear_btn = gr.Button("Clear", variant="secondary", scale=1)
+        
+        # Re-login section
+        with gr.Row():
+            relogin_btn = gr.Button("🔄 Re-login", variant="secondary", scale=1)
+            check_token_btn = gr.Button("🔍 Check Token", variant="secondary", scale=1)
+            login_status = gr.Textbox(
+                value=chatbot.get_token_status(),
+                label="Connection Status",
+                interactive=False,
+                scale=2
+            )
         
         # Add some examples
         gr.Examples(
@@ -80,6 +123,16 @@ def main():
         clear_btn.click(
             clear_chat,
             outputs=[chatbot_interface]
+        )
+        
+        relogin_btn.click(
+            re_login,
+            outputs=[login_status]
+        )
+        
+        check_token_btn.click(
+            check_token,
+            outputs=[login_status]
         )
 
     return demo

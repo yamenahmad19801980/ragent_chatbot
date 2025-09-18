@@ -47,6 +47,62 @@ class RagentChatbot:
         
         self.graph = self._build_graph()
     
+    def refresh_token(self) -> bool:
+        """Refresh the access token by re-logging in."""
+        try:
+            self.logger.info("Refreshing access token...")
+            # Get fresh credentials from config
+            from config import Config
+            new_token = self.api_client.login(Config.EMAIL, Config.PASSWORD)
+            if new_token:
+                self.logger.info("Access token refreshed successfully")
+                return True
+            else:
+                self.logger.error("Failed to refresh access token")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error refreshing token: {e}")
+            return False
+    
+    def get_token_status(self) -> str:
+        """Get the current token status."""
+        if self.api_client.token:
+            # Show first 10 characters of token for verification
+            token_preview = self.api_client.token[:10] + "..." if len(self.api_client.token) > 10 else self.api_client.token
+            return f"✅ Connected to Syncrow API (Token: {token_preview})"
+        else:
+            return "❌ Not connected to Syncrow API"
+    
+    def check_token_validity(self) -> bool:
+        """Check if the current token is still valid by making a test API call."""
+        try:
+            if not self.api_client.token:
+                return False
+            
+            # Make a simple API call to test token validity
+            test_response = self.api_client.get_devices_per_space(
+                Config.PROJECT_UUID, 
+                Config.COMMUNITY_UUID, 
+                Config.SPACE_UUID
+            )
+            
+            if test_response.get("statusCode") == 200:
+                self.logger.info("Token is valid")
+                return True
+            else:
+                self.logger.warning("Token appears to be invalid")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error checking token validity: {e}")
+            return False
+    
+    def ensure_valid_token(self) -> bool:
+        """Ensure we have a valid token, refresh if necessary."""
+        if not self.api_client.token or not self.check_token_validity():
+            self.logger.info("Token invalid or missing, attempting to refresh...")
+            return self.refresh_token()
+        return True
+    
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow."""
         builder = StateGraph(MessagesState)

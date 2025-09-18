@@ -26,10 +26,24 @@ class DeviceService:
         self.device_descriptions = pd.read_csv(Config.CSV_PATH)
         self.logger = get_logger(__name__)
     
+    def _ensure_valid_token(self) -> bool:
+        """Ensure we have a valid token before making API calls."""
+        if not self.api_client.token:
+            self.logger.warning("No token available, attempting to login...")
+            from config import Config
+            new_token = self.api_client.login(Config.EMAIL, Config.PASSWORD)
+            return new_token is not None
+        return True
+    
     @cached("devices_in_space", ttl=300)  # Cache for 5 minutes
     def get_devices_in_space(self, project_uuid: str, community_uuid: str, space_uuid: str) -> List[Device]:
         """Get all devices in a specific space."""
         start_time = time.time()
+        
+        # Ensure we have a valid token
+        if not self._ensure_valid_token():
+            self.logger.error("Failed to obtain valid token for device operation")
+            return []
         
         devices_json = self.api_client.get_devices_per_space(project_uuid, community_uuid, space_uuid)
         
@@ -75,6 +89,11 @@ class DeviceService:
     def control_device(self, device_uuid: str, user_message: str, product_type: str) -> Dict[str, Any]:
         """Control a device based on user message."""
         start_time = time.time()
+        
+        # Ensure we have a valid token
+        if not self._ensure_valid_token():
+            self.logger.error("Failed to obtain valid token for device control")
+            return {"error": "Authentication failed. Please re-login."}
         
         # Get device functions (with caching)
         functions_json = self.api_client.get_device_functions(device_uuid)
