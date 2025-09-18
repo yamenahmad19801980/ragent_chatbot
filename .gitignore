@@ -56,3 +56,9 @@ logs/
 
 # Hugging Face
 .huggingface/
+
+# LangGraph Studio
+studio/.langgraph_api/
+studio/*.pckl
+studio/*.pkl
+studio/store.*
