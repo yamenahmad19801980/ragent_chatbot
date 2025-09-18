@@ -139,7 +139,7 @@ class RagentChatbot:
         
         # Set ambiguous for None device_uuid
         for tool_call in response.tool_calls:
-            if tool_call["args"]["device_uuid"] is None:
+            if tool_call["args"].get("device_uuid") is None:
                 tool_call["args"]["Intent"] = "ambiguous"
         
         return {**state, "messages": state["messages"] + [response]}
@@ -152,7 +152,7 @@ class RagentChatbot:
         
         next_nodes = set()
         for tool_call in message.tool_calls:
-            intent = tool_call["args"]["Intent"]
+            intent = tool_call["args"].get("Intent", "conversation")  # Default to conversation
             if intent == "ambiguous":
                 next_nodes.add("request_clarification")
             elif intent == "control":
@@ -168,7 +168,8 @@ class RagentChatbot:
             elif intent == "scene":
                 next_nodes.add("handle_scene")
             else:
-                raise ValueError(f"Unknown intent: {intent}")
+                # Default to conversation for unknown intents
+                next_nodes.add("chat_node")
         
         return list(next_nodes)
     
@@ -198,10 +199,10 @@ class RagentChatbot:
         user_messages = []
         
         for tool_call in message.tool_calls:
-            device_uuid = tool_call["args"]["device_uuid"]
-            user_message = tool_call["args"]["user_message"]
+            device_uuid = tool_call["args"].get("device_uuid")
+            user_message = tool_call["args"].get("user_message", "")
             
-            if tool_call["args"]["Intent"] == "control":
+            if tool_call["args"].get("Intent") == "control" and device_uuid:
                 product_type = [device.product_type for device in devices[0].value if device.uuid == device_uuid]
                 if product_type:
                     user_messages.append({
