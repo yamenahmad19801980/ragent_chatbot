@@ -13,7 +13,7 @@ from config import Config
 from domain.async_api_client import AsyncSyncrowAPIClient
 from domain.objects import Device, DeviceFunction, DeviceSchedule, Scene
 from llm import get_qwen_llm
-from prompts.templates import PromptTemplates
+from prompts.prompt_manager import prompt_manager
 from utils.cache import cached, cache_key_for_device_operation, cache_manager
 from utils.logger import get_logger, log_device_operation, log_performance
 
@@ -90,8 +90,10 @@ class AsyncDeviceService:
         # Use LLM to determine the correct function and value
         llm_tool_functions = self.llm.bind_tools(tools=[DeviceFunction], parallel_tool_calls=True)
         
-        system_prompt = PromptTemplates.get_device_control_single_prompt(
-            user_message, device_uuid, product_type, descriptions, possible_values
+        system_prompt = prompt_manager.get_device_control_prompt(
+            str([{"device_uuid": device_uuid, "user_message": user_message, "product_type": product_type}]),
+            "\n".join(descriptions),
+            user_message
         )
         
         response = llm_tool_functions.invoke([SystemMessage(content=system_prompt)])
@@ -320,7 +322,7 @@ Extract the following:
         # Use LLM to match scene name
         llm_with_scene = self.llm.bind_tools(tools=[Scene])
         
-        system_prompt = PromptTemplates.get_scene_prompt(scene_name, available_scenes)
+        system_prompt = prompt_manager.get_scene_activation_prompt(scene_name, str(available_scenes))
         
         response = llm_with_scene.invoke([SystemMessage(content=system_prompt)])
         
